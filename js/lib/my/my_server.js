@@ -1,6 +1,5 @@
 /*global exports, JSON, console, myModules, require */
 var io = require('socket.io');
-var ws = require('websocket-server');
 var http = require('http');
 var sys = require('sys');
 
@@ -16,6 +15,13 @@ var DPD = mycs.DPD;
 
 function SocketIoProxy(port, openProc, messageProc, closeProc, opt_server){
 	this.io = io.listen(port);
+	var self = this;
+	this.io.configure(function(){
+		self.io.enable('browser client minification');
+		self.io.enable('browser client etag');
+		self.io.set('log level', 0);
+		self.io.set('transports', ['websocket']);
+	});
 	this.io.sockets.on('connection', function(socket){
 		socket.on('message', function(message){
 			if (messageProc) {

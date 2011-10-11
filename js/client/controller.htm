@@ -1,85 +1,108 @@
 <!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN">
 <html>
 <head>
-<META http-equiv=content-type content="text/html; charset=UTF-8">
-<title>Controller</title>
-<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no">
-
-<style TYPE="text/css">
-<!--
-body{
-}
-.button{
-	position: absolute;
-	-webkit-transform: rotate(45deg);
-	-moz-transform: rotate(45deg);
-	background-color: #ff0000;
-}
-#up_button{
-	top: 0px;
-	left: 33%;
-}
-#down_button{
-	top: 66%;
-	left: 33%;
-}
-#left_button{
-	top: 33%;
-	left: 0px;
-}
-#right_button{
-	top: 33%;
-	left: 66%;
-}
-#debug1{
-	top: 0px;
-	left: 0px;
-	width: 470px;
-	position: absolute;
-	background-color: #ffff00;
-	display: none;
-}
-#debug2{
-	top: 0px;
-	left: 0px;
-	height: 260px;
-	position: absolute;
-	background-color: #ffff00;
-	display: none;
-}
-#switch_hmd_mode{
-	top: 0px;
-	left: 0px;
-	position: absolute;
-}
--->
-</style>
+	<META http-equiv=content-type content="text/html; charset=UTF-8">
+	<meta http-equiv="cache-control" content="no-cache">
+	<title></title>
+	<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no">
+	<link type="text/css" rel="stylesheet" href="http://code.jquery.com/mobile/1.0rc2/jquery.mobile-1.0rc2.min.css" />
+	<style type="text/css">
+		#painting_parent {
+			text-align: center;
+		}
+		#painting {
+			width: 100%;
+			height: 300px;
+			background-color: #ff0000;
+			display: inline-block;
+			border-width: 1px;
+			border-style: solid;
+		}
+		.ui-field-contain input.ui-slider-input {
+			width: 90px;
+		}
+		.ui-field-contain {
+			margin: 20px;
+		}
+		#color_palette {
+			overflow-x: scroll;
+			white-space: nowrap;
+			padding: 10px 4px;
+			background-color: white;
+			-webkit-overflow-scrolling:touch;
+			width: 100%;
+			-webkit-box-sizing: border-box;
+		}
+		.palette_color {
+			display: inline-block;
+			width: 40px;
+			height: 40px;
+			margin: 0px 5px;
+			border-style: solid;
+		}
+	</style>
 </head>
 <body>
-	<div class="button" id="up_button"></div>
-	<div class="button" id="down_button"></div>
-	<div class="button" id="left_button"></div>
-	<div class="button" id="right_button"></div>
-	<button id="switch_hmd_mode">switch HMD mode</button>
-	
-	<div id="debug1">neko</div>
-	<div id="debug2">neko</div>
-	
+	<div data-role="page" data-theme="b">
+		<div data-role="header">
+			<h1>Kinect Modeling Tool Controller</h1>
+		</div>
+		<div data-role="content">
+			ID: <span id="id"></span>
+			<div data-role="fieldcontain" id="painting_parent">
+				<div id="painting"></div>
+			</div>
+			<div data-role="fieldcontain">
+				<label for="recording">Recording:</label>
+				<select name="recording" id="recording" data-role="slider">
+					<option value="off">Off</option>
+					<option value="on">On</option>
+				</select> 
+			</div>
+			<div data-role="fieldcontain">
+				<div id="color_palette">
+				</div>
+			</div>
+			<div data-role="fieldcontain">
+				<label for="brush_size">Brush Size:</label>
+				<input type="range" name="brush_size" id="brush_size" step="100" min="0" max="1000"/>
+			</div>
+			<div data-role="fieldcontain">
+				<a data-role="button" id="save_model_button">Save Model</a>
+			</div>
+			<div data-role="fieldcontain">
+				<a data-role="button" id="clear_model_button">Clear Model</a>
+			</div>
+			<div data-role="fieldcontain">
+				<label for="inhibit_destroy_block_command">Inhibit browsers from destroying block(For Demo):</label>
+				<select name="inhibit_destroy_block_command" id="inhibit_destroy_block_command" data-role="slider">
+					<option value="off">Off</option>
+					<option value="on">On</option>
+				</select> 
+			</div>
+   		</div>
+	</div>
+	<script type="text/javascript" src="http://code.jquery.com/jquery-1.6.4.min.js"></script>
+	<script type="text/javascript" src="http://code.jquery.com/mobile/1.0rc2/jquery.mobile-1.0rc2.min.js"></script>
 	<script type="text/javascript">
 		var myModules = {};
 	</script>
 	<script type="text/javascript" src="../lib/my/my_client_and_server.js"></script>
+	<script type="text/javascript" src="../lib/my/my_client.js"></script>
 	<script type="text/javascript">
 		myModules.mycs.setShorthands(window);
 	</script>
-	<script type="text/javascript" defer src="../lib/my/my_client.js"></script>
-	<script type="text/javascript" defer src="../client_and_server/client_and_server.js"></script>
+	<script type="text/javascript" src="../client_and_server/client_and_server.js"></script>
+	<script type="text/javascript">
+		if (window.MozWebSocket !== undefined) {
+			window.WebSocket = window.MozWebSocket;
+		}
+	</script>
 	<script type="text/javascript" src="lib/socket.io-client/socket.io.js"></script>
 	<script type="text/javascript">
-		WEB_SOCKET_SWF_LOCATION = 'lib/socket.io-client/lib/vendor/web-socket-js/WebSocketMain.swf';
+		window.WEB_SOCKET_SWF_LOCATION = 'lib/socket.io-client/lib/vendor/web-socket-js/WebSocketMain.swf';
 	</script>
-	<script type="application/javascript" defer src="controller.js"></script>
-
+	<script type="text/javascript" src="controller.js"></script>
 </body>
 </html>
 

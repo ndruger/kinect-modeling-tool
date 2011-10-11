@@ -1,137 +1,109 @@
 /*global exports, JSON, cs, ASSERT, LOG, superClass, inherit, Proxy, DP */
-/*global myModules */
+/*global myModules, $ */
 (function(){
 var myc = myModules.myc;
 var mycs = myModules.mycs;
 var cs = myModules.cs;
 
-var field, proxy;
+var proxy;
+var selectedColor = 'red';
 
-function debugOneDP(in_s){
-	document.getElementById('debug2').innerHTML = in_s;
-}
-var debugCount = 0;
-function debugStyle(){
-	var a = document.documentElement.scrollHeight + ',';
-	a += document.documentElement.offsetHeight + ',';
-	a += document.documentElement.clientHeight + ',';
-	a += document.documentElement.scrollLeft + ',';
-	a += document.body.clientHeight + ',';
-	a += document.body.scrollHeight + ',';
-	a += window.innerHeight + ',';
-	a += debugCount;debugCount++;
-	debugOneDP(a);
-}
+var BRUSH_SCAEL = 1000;	// input attribute step=0.1 doesn't work fine on jquery mobile.
 
-function myDocumentSize(){
-	// Don't use documentElement.clientHeight. FX4 returns content height.
-	// Don't use body.clientHeight. iPhone landscape mode returns bad value.
-	
-	return { width: window.innerWidth, height: window.innerHeight };
-}
-
-function setButtonsStyle(){
-	var space = 30;
-	document.body.scrollLeft = 0;	// for iPhone bug(?)
-	document.body.scrollTop = 0;
-	
-	var doc_size = myDocumentSize();
-
-	var vertical_button_hypotenuse = doc_size.height - space;
-	var vertical_button_size = Math.sqrt(Math.pow(vertical_button_hypotenuse, 2) / 2);
-
-	var horizontal_button_hypotenuse = doc_size.width - space;
-	var horizontal_button_size = Math.sqrt(Math.pow(horizontal_button_hypotenuse, 2) / 2);
-
-	var up_button = document.getElementById('up_button');
-	up_button.style.width = vertical_button_size;
-	up_button.style.height = vertical_button_size;
-	up_button.style.left = doc_size.width / 2 - vertical_button_size / 2;
-	up_button.style.top = - vertical_button_size / 2;
-
-	var down_button = document.getElementById('down_button');
-	down_button.style.width = vertical_button_size;
-	down_button.style.height = vertical_button_size;
-	down_button.style.left = doc_size.width / 2 - vertical_button_size / 2;
-	down_button.style.top = doc_size.height - vertical_button_size / 2;
-
-	var left_button = document.getElementById('left_button');
-	left_button.style.width = horizontal_button_size;
-	left_button.style.height = horizontal_button_size;
-	left_button.style.left = - horizontal_button_size / 2;
-	left_button.style.top = doc_size.height / 2 - horizontal_button_size / 2;
-
-	var right_button = document.getElementById('right_button');
-	right_button.style.width = horizontal_button_size;
-	right_button.style.height = horizontal_button_size;
-	right_button.style.left = doc_size.width - horizontal_button_size / 2;
-	right_button.style.top = doc_size.height / 2 - horizontal_button_size / 2;	
-}
-function handleTouchStart(in_e, in_dir){
-	in_e.preventDefault();
-	if (!proxy) {
-		return;
-	}
-	var dir = in_e.target.id.split('_button')[0];
-	switch (dir) {		
-	case 'up':
-	case 'down':
-		proxy.send({
-			type: 'move_request',
-			arg: {
-				dir: dir
-			}
-		});
-		break;
-	case 'left':
-	case 'right':
-		proxy.send({
-			type: 'turn',
-			arg: {
-				diff: {'right': -10, 'left': 10}[dir]
-			}
-		});
-		break;
-	}
-}
-
-window.addEventListener('load', function(){
-	setTimeout(function(){	// for Android progress bar on xhr-polling
-		setButtonsStyle();	
-
-		proxy = new myc.SocketIoProxy(
-			cs.CONTROLLER_PORT,
-			function(){
-				LOG('open');
-				var buttons = ['up_button', 'down_button', 'left_button', 'right_button'];
-				var len = buttons.length;
-				for(var i = 0; i < len; i++) {
-					document.getElementById(buttons[i]).addEventListener('touchstart', handleTouchStart, false);
-					document.getElementById(buttons[i]).addEventListener('click', handleTouchStart, false);
-				}
-			},
-			null,
-			function(){
-				LOG('close');
-			}
-		);
-	}, 0);
-
-	var old_doc_height = myDocumentSize().height;
-	setInterval(function(){	// I can't use orientationchange. window.innerHeight does not changed on the listener on Android.
-		var new_height = myDocumentSize().height;
-		if (old_doc_height !== new_height) {
-			old_doc_height = new_height;
-			setButtonsStyle();
+function updatePalette() {
+	$('#painting').css('background-color', selectedColor);
+	var brushSize = $('#brush_size').attr('value') / BRUSH_SCAEL;
+	proxy.send({
+		type: 'update_palette',
+		arg: {
+			color: cs.paletteColors[selectedColor],
+			r: brushSize
 		}
-	}, 300);
-	
-	document.getElementById('switch_hmd_mode').addEventListener('click', function(){
+	});
+}
+
+function start() {
+	$('#recording').bind('change', function(e) {
 		proxy.send({
-			type: 'switch_hmd_mode'
+			type: (this.value === 'on')? 'start_record': 'stop_record'
 		});
-	}, false);
-}, false);
+	});
+	var painting = $('#painting');
+	painting.bind('touchstart mousedown', function() {
+		proxy.send({
+			type: 'start_paint'
+		});
+	});
+	painting.bind('touchend mouseup', function() {
+		proxy.send({
+			type: 'end_paint'
+		});
+	});
+	
+	$('#brush_size').bind('change', updatePalette);
+	
+	$('#save_model_button').bind('click', function() {
+		var name = prompt('Please input the model name.', 'Default');
+		proxy.send({
+			type: 'save_model',
+			arg: {
+				name: name
+			}
+		});
+	});
+
+	$('#clear_model_button').bind('click', function() {
+		proxy.send({
+			type: 'clear_all_blocks'
+		});
+	});
+
+	$('#inhibit_destroy_block_command').bind('change', function(e) {
+		proxy.send({
+			type: 'set_inhibit_destroy_block_flag',
+			arg: {
+				flag: (this.value === 'on')
+			}
+		});
+	});
+}
+
+$(document).ready(function(){
+	
+	var wrap = $('<div/>');
+	for (var name in cs.paletteColors) {
+		var color = $('<div/>')
+			.addClass('palette_color')
+			.css('background-color', name)
+			.bind('click', (function(name){
+				return function(){
+					selectedColor = name;
+					updatePalette();
+				};
+			})(name));
+		wrap.append(color);
+	}
+	$('#color_palette').append(wrap);
+	
+	$('#brush_size').val(cs.DEFAULT_BLOCK_SIZE * BRUSH_SCAEL).slider('refresh');
+	proxy = new myc.SocketIoProxy(
+		cs.CONTROLLER_PORT,
+		function(){
+			LOG('open');
+			start();
+		},
+		function(data) {
+			switch (data.type) {
+			case 'notify_id': 
+				$('#id').html(data.arg.id);
+				break;
+			}
+		},
+		function(){
+			LOG('close');
+		}
+	);
+});
 
 window.addEventListener('unload', function(){	// for browser bug
 	if (proxy) {

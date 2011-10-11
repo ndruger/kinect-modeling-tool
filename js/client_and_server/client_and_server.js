@@ -23,6 +23,19 @@ exports.FIELD_X_WIDTH = 200.0;
 exports.FIELD_Z_WIDTH = 200.0;
 exports.FIELD_Y_WIDTH = 30.0;
 
+exports.DEFAULT_BLOCK_SIZE = 0.3;
+
+exports.paletteColors = {
+	red: {r: 1.0, g: 0.0, b: 0.0},
+	lime: {r: 0.0, g: 1.0, b: 0.0},
+	blue: {r: 0.0, g: 0.0, b: 1.0},
+	yellow: {r: 1.0, g: 1.0, b: 0.0},
+	aqua: {r: 0.0, g: 1.0, b: 1.0},
+	magenta: {r: 1.0, g: 0.0, b: 1.0},
+	white: {r: 1.0, g: 1.0, b: 1.0},
+	black: {r: 0.0, g: 0.0, b: 0.0}
+};
+
 var ID_SIZE = 10;
 exports.ID_SIZE = ID_SIZE;
 
@@ -32,7 +45,7 @@ exports.SCALE = SCALE;
 exports.PLAYER_BULLET_R = 0.8;
 exports.ENEMY_BULLET_R = 0.3;
 
-exports.calcRoatatePosition = function(angle, r){
+var calcRoatatePosition = function(angle, r){
 	var modelView = mat4.create();
 	
 	mat4.identity(modelView);
@@ -46,6 +59,7 @@ exports.calcRoatatePosition = function(angle, r){
 	
 	return newPos;
 };
+exports.calcRoatatePosition = calcRoatatePosition;
 
 function normalize(pos){
 	var l = Math.sqrt(Math.pow(pos.x, 2) + Math.pow(pos.y, 2) + Math.pow(pos.z, 2));
@@ -133,6 +147,15 @@ Field.prototype.addPiece = function(piece, id){
 Field.prototype.removePiece = function(id){
 	ASSERT(this._pieces[id]);
 	delete this._pieces[id];
+};
+Field.prototype.removePiecesByType = function(type){
+	var pieces = [];
+	for (var id in this._pieces) {
+		var piece = this._pieces[id];
+		if (piece.type === type) {
+			delete this._pieces[id];
+		}
+	}
 };
 Field.prototype.getPiecesByType = function(type){
 	var pieces = [];
@@ -279,6 +302,22 @@ Player.prototype.rotatePosition = function(pos){
 Player.prototype.turn = function(diff){
 	this.angleY += diff;
 	this.updateJointsPosition();
+};
+Player.prototype.move = function(dir){
+	var angle = this.angleY;
+	if (dir === 'up') {
+		angle -= 180;
+	}
+	var diff = calcRoatatePosition({
+		x: 0,
+		y: angle,
+		z: 0
+	}, 2);
+	this.setBasePosition({
+		x: this.basePos.x + diff[0],
+		y: this.basePos.y + diff[1],
+		z: this.basePos.z + diff[2]
+	});
 };
 Player.prototype.setBasePosition = function(pos){
 	this.basePos = mycs.deepCopy(pos);

@@ -53,7 +53,7 @@ function createBufferingTCPServer(port){
 }
 
 if (isReplay) {
-	fs.open(replayPath, 'r', undefined, function(status, fd){
+	fs.open(replayPath, 'r', undefined, function(status, fd){	// todo: error
 		if (status !== null) {
 			process.exit();
 		}

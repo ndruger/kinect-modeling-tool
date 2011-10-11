@@ -2,14 +2,7 @@
 	<head>
 		<title>kinect game base</title>
 		<META http-equiv=content-type content="text/html; charset=UTF-8">
-		<script type="text/javascript">
-			function isSmartPhone(){
-				return (navigator.userAgent.match(/iPhone/i) || navigator.userAgent.match(/iPod/i) || navigator.userAgent.match(/Android/i));
-			}
-			if (isSmartPhone()) {
-				location.href = "controller.htm";
-			}
-		</script>
+		<meta http-equiv="cache-control" content="no-cache">
 		<style TYPE="text/css">
 		<!--
 		body{
@@ -25,16 +18,6 @@
 			color: #ff0000;
 			font-weight: bolder;
 			white-space: nowrap;
-		}
-		.life_bar{
-			opacity: 0.6;
-			height: 20px;
-			background-color: #ff0000;
-			margin: 10px;
-		}
-		.life_bar_life{
-			background-color: #00ff00;
-			height: 20px;
 		}
 		.exp_unit{
 			border-style: solid;
@@ -69,6 +52,9 @@
 		#swith_VR920_mode{
 			opacity: 0.6;
 		}
+		#player_info {
+			display: none;
+		}
 		#life_bars{
 			opacity: 0.6;
 			width: 300px;
@@ -85,42 +71,51 @@
 	<body>
 		<canvas id="main_canvas" width="1000" height="600"></canvas>
 		<div id="info">
-			<div id="my_life_bar_wrapper"></div>
+			<div id="pieces_count"></div>
 			<div id="fps"></div>
 			<div id="packet_per_second_from_remote"></div>
 			<div id="packet_per_second_from_device"></div>
 			<div id="echo_info"></div>
-			<div id="controller_list_wrapper">
-				マッピングされてないiPhone / iPod touch一覧<br>
-				<div id="controller_list"></div>
-			</div>
-			<button id="swith_VR920_mode">VR920 on</button>
-			<div id="life_bars">
+			<div id="browser_count"></div>
+			<div id="block_number"></div>
+			<div id="player_info">
+				<div id="controller_list_wrapper">
+					マッピングされてないiPhone / iPod touch一覧<br>
+					<div id="controller_list"></div>
+				</div>
+				<button id="swith_VR920_mode">VR920 on</button>
 			</div>
 		</div>
 		<br>
-		<div class="exp_unit">
-		<!-- ■ コピーライト<br>
-		- このゲームのキャラクタの画像は、<a href="http://opengameart.org">OpenGameArg.org</a>が配布している3D画像素材の<a href="http://opengameart.org/content/tux">tux</a>を加工して使用してます。<br> -->
-		</div>
-		<div id="output"></div>
 		<br>
 		<script type="text/javascript">
 			var myModules = {};
 		</script>
-		<script type="text/javascript" defer src="lib/scenejs/scenejs.js"></script>
-		<script type="text/javascript" defer src="../client_and_server/lib/glMatrix-0.9.4.min.js"></script>
+		<script type="text/javascript" src="lib/underscore-min.js"></script>
+		<script type="text/javascript" src="lib/scenejs/scenejs.js"></script>
+		<script type="text/javascript" src="../client_and_server/lib/glMatrix-0.9.4.min.js"></script>
 		<script type="text/javascript" src="../lib/my/my_client_and_server.js"></script>
+		<script type="text/javascript" src="../lib/my/my_client.js"></script>
 		<script type="text/javascript">
 			myModules.mycs.setShorthands(window);
 		</script>
-		<script type="text/javascript" defer src="../lib/my/my_client.js"></script>
+		<script type="text/javascript">
+			var query = myModules.myc.parseQuery();
+			if (query.use_dummy_data === 'true') {
+				document.write('<script type="text/javascript" src="./dummy_data.js"></' + 'script>');
+			}
+		</script>
 		<script type="text/javascript" src="../client_and_server/client_and_server.js"></script>
+		<script type="text/javascript">
+			if (window.MozWebSocket !== undefined) {
+				window.WebSocket = window.MozWebSocket;
+			}
+		</script>
+		<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.4/jquery.min.js"></script>
 		<script type="text/javascript" src="lib/socket.io-client/socket.io.js"></script>
 		<script type="text/javascript">
-			WEB_SOCKET_SWF_LOCATION = 'lib/socket.io-client/lib/vendor/web-socket-js/WebSocketMain.swf';
+			window.WEB_SOCKET_SWF_LOCATION = 'lib/socket.io-client/lib/vendor/web-socket-js/WebSocketMain.swf';
 		</script>
-		<script type="text/javascript" defer src="blender.js"></script>
-		<script type="text/javascript" defer src="client.js"></script>
+		<script type="text/javascript" src="client.js"></script>
 	</body>
 </html>

@@ -79,16 +79,19 @@ XPSCounter.prototype.update = function(opt_proc){
 			this.prevCount = this.countFrame;
 			this.countFrame = 0;
 			this.oldTime += 1000;
+			return true;
 		}
+		return false;
 	} else {
 		this.oldTime = Date.now();
+		return false;
 	}
 };
+module.XPSCounter = XPSCounter;
 XPSCounter.prototype.increment = function(proc){
 	this.update(proc);
 	this.countFrame++;
 };
-module.XPSCounter = XPSCounter;
 
 function deepCopy(o){
 	if (o instanceof Array) {
@@ -174,6 +177,26 @@ module.createId = function(n){
 	}
 	return id;
 };
+module.randomColor = function() {
+	return '#' + Math.floor((0xffffff + 1) * Math.random()).toString(16);
+};
+
+module.checkArgs = function(obj, essenticalNames, validNames) {
+	var name;
+	for (var i = essenticalNames.length - 1; i >= 0; i--) {
+		name = essenticalNames[i];
+		ASSERT(obj[name] !== undefined);
+	}
+	for (name in obj) {
+		if (essenticalNames.indexOf(name) !== -1) {
+			continue;
+		}
+		if (validNames.indexOf(name) !== -1) {
+			continue;
+		}
+		ASSERT(false, name);
+	}
+};
 
 /*global DP, LOG, ASSERT, DIR, DPD */
 module.setShorthands = function(namespace){
@@ -181,6 +204,46 @@ module.setShorthands = function(namespace){
 	for (var i = 0, len = shorthands.length; i < len; i++) {
 		namespace[shorthands[i]] = module[shorthands[i]];
 	}
+};
+
+module.isOverlappingBox = function(box1, box2) {
+	return (
+		box1.startX <= box2.endX &&
+		box1.endX >= box2.startX &&
+		box1.startY <= box2.endY &&
+		box1.endY >= box2.startY &&
+		box1.startZ <= box2.endZ &&
+		box1.endZ >= box2.startZ
+	);
+};
+
+module.axisAndAngleToQuta = function(quat4, vec, angle) {	// todo: fix quat4
+    var sinBase = Math.sin(angle * 0.5);
+	
+	return quat4.create([
+		vec[0] * sinBase,
+		vec[1] * sinBase,
+		vec[2] * sinBase,
+		Math.cos(angle * 0.5)
+	]);
+};
+
+module.quatToAxisAndAngle = function(quat) {
+	var angle = 2 * Math.acos(quat[3]);
+	var sinBase = Math.sin(angle * 0.5);
+	
+	return {
+		vector: [
+			1 / sinBase * quat[0],
+			1 / sinBase * quat[1],
+			1 / sinBase * quat[2]
+		],
+		angle: angle
+	};
+};
+
+module.isSafeFilename = function(name) {
+	return name.match(/^([a-zA-Z_0-9\.]+$)/);
 };
 
 })();

@@ -1,25 +1,21 @@
-/*global DP, io, cs, SceneJS, ASSERT, DPD, LOG, BlenderExport, myModules, KeyEvent */
-/*global Enemy, render */
+/*global DP, io, cs, SceneJS, ASSERT, DPD, LOG, BlenderExport, myModules, KeyEvent, dummyDeviceData */
+/*global render, handleDeviceMessage, $, _ */
 (function(){
 var DEBUG = true;
 var cs = myModules.cs;
 var mycs = myModules.mycs;
 var myc = myModules.myc;
-var deviceProxy, remoteProxy, field, myPlayerId = -1, counter, myEnemyId, renderingTimer = -1, nobind_conrollers;
-var lifeBars;
-
+var deviceProxy, remoteProxy, field, myPlayerId = -1, counter, myEnemyId, renderingTimer = -1, nobindConrollers;
+var viewerEye;
 var FPS = 30;
 var SCALE = 0.008;
 var EYE_Z = 70;	// todo: check SCALE
 var LOOK_AT_EYE = { x: 0.0, y: 10, z: EYE_Z };
 
 var useVR920 = false;
-
-var devicePort = cs.DEVICE_PORT;
 var query = myc.parseQuery();
-if (query.port) {
-	devicePort = query.port;
-}
+var devicePort = query.port || cs.DEVICE_PORT;
+var useDummyRemote = (query.use_dummy_remote === 'true');
 
 // todo: create objects
 function chainSimpleRotate(id, nodes, type){
@@ -68,7 +64,7 @@ function createAndMountNodes(node, id){
 }
 function removeNode(id){
 	SceneJS.Message.sendMessage({
-		command: "update",
+		command: 'update',
 		target: 'mount-node',
 		remove: {
 			node: id
@@ -76,72 +72,47 @@ function removeNode(id){
 	});
 }
 
-function displayMessage(message){
-	var ele = document.getElementById('message');
-	if (!ele) {
-		var canvas = document.getElementById('main_canvas');
-		var bound_rect = canvas.getBoundingClientRect();
-	
-		ele = document.createElement('div');
-		ele.id = 'message';
-		ele.style.top =  bound_rect.top + window.scrollY + bound_rect.height / 3 + 'px';
-		ele.style.left =  bound_rect.left + window.scrollX + bound_rect.width / 3 + 'px';
-		ele.style.height =  bound_rect.height / 3 + 'px';
-		ele.style.width =  bound_rect.width / 3 + 'px';
-		document.documentElement.appendChild(ele);
-	}
-	ele.innerHTML = message;
-}
-
 function NobindControllers(){
+	$('#controller_list').delegate('button', 'click', function() {
+		remoteProxy.send({type: 'binding_request', arg:{id: this.textContent}});
+		this.parentNode.innerHTML = '';	// todo: too fast
+	});
 }
-NobindControllers.prototype.update = function(in_id_list){
-	var df = document.createDocumentFragment();
-	var len = in_id_list.length;
-	var self = this;
-	for (var i = 0; i < len; i++) {
-		var ele = document.createElement('button');
-		ele.innerHTML = in_id_list[i];
-		ele.addEventListener('click', function(){
-			self.requestBinding(this.textContent);
-			ele.parentNode.innerHTML = '';	// todo: too fast
-		}, false);
-		df.appendChild(ele);
-	}
-
-	var list_element = document.getElementById('controller_list'); 
-	list_element.innerHTML = '';
-	list_element.appendChild(df);
-};
-NobindControllers.prototype.requestBinding = function(in_id){
-	remoteProxy.send({type: 'binding_request', arg:{id: in_id}});
+NobindControllers.prototype.update = function(idList){
+	LOG('NobindControllers.prototype.update: list: ' + idList);
+	var listNode = $('#controller_list');
+	listNode.text('');
+	idList.forEach(function(id) {
+		listNode.append($('<button/>').html(id));
+	});
 };
 
 function ClientField(aspect){
 	mycs.superClass(ClientField).constructor.apply(this, []);
+	this.blockCount = 0;
 	SceneJS.createNode({
-		type: "scene",
-		id: "the-scene",
-		canvasId: "main_canvas",
-		loggingElementId: "theLoggingDiv",
+		type: 'scene',
+		id: 'the-scene',
+		canvasId: 'main_canvas',
+		loggingElementId: 'theLoggingDiv',
 		nodes: [{
-			type: "lookAt",
+			type: 'lookAt',
 			eye : LOOK_AT_EYE, 
 			look : { x:0, y:0, z:0 },
 			up : { y: 1.0 },
-			id: "player_eye",
+			id: 'eye',
 			nodes: [{
-				type: "camera",
+				type: 'camera',
 				optics: {
-					type: "perspective",
+					type: 'perspective',
 					fovy : 25.0,
 					aspect : aspect,
 					near : 0.10,
 					far : 300.0
 				},
 				nodes: [{
-					type: "light",
-					mode: "dir",
+					type: 'light',
+					mode: 'dir',
 					color: { r: 0.9, g: 0.9, b: 0.9 },
 					diffuse: true,
 					specular: true,
@@ -149,8 +120,8 @@ function ClientField(aspect){
 					pos: { x: 0.0, y: 0.0, z: 0.0}
 				},
 				{
-					type: "light",
-					mode: "dir",
+					type: 'light',
+					mode: 'dir',
 					color: { r: 0.3, g: 0.3, b: 0.3 },
 					diffuse: true,
 					specular: true,
@@ -158,8 +129,8 @@ function ClientField(aspect){
 					pos: { x: 0.0, y: 10.0, z: EYE_Z }
 				},
 				{
-					type: "light",
-					mode: "dir",
+					type: 'light',
+					mode: 'dir',
 					color: { r: 0.3, g: 0.3, b: 0.3 },
 					diffuse: true,
 					specular: true,
@@ -167,29 +138,29 @@ function ClientField(aspect){
 					pos: { x: 0.0, y: 10.0, z: -EYE_Z }
 				},
 				{
-				    type: "material",
-				    id: "floor",
+				    type: 'material',
+				    id: 'floor',
 				    baseColor: { r: 0.2, g: 0.2, b: 0.2 },
 				    shine: 6.0,
 				    nodes: [{
-			            type: "texture",
+			            type: 'texture',
 			            layers: [{
-		                    uri: "img/wall.png",
-		                    minFilter: "linearMipMapLinear",
-		                    wrapS: "repeat",
-		                    wrapT: "repeat",
+		                    uri: 'img/wall.png',
+		                    minFilter: 'linearMipMapLinear',
+		                    wrapS: 'repeat',
+		                    wrapT: 'repeat',
 		                    scale : { x: 100.0, y: 100.0, z: 10.0 }
 			            }],
 			            nodes: [{
-							type: "translate",
+							type: 'translate',
 							y: -1,
 							nodes: [{
-			                    type: "scale",
+			                    type: 'scale',
 			                    x: cs.FIELD_X_WIDTH / 2,
 			                    y: 1.0,
 			                    z : cs.FIELD_Z_WIDTH / 2,
 			                    nodes: [{
-			                    	type: "cube"
+			                    	type: 'cube'
 			                    }]
 							}]
 			            }]
@@ -197,7 +168,7 @@ function ClientField(aspect){
 				},
 				{
 					id: 'base',
-		            type: "cube",
+		            type: 'cube',
 					xSize: 0.1,
 					ySize : 0.1,
 					zSize : 0.1
@@ -206,7 +177,7 @@ function ClientField(aspect){
 					type: 'translate',
 					id: 'debug_cube-translate',
 				    nodes: [{
-			            id: "debug_cube",
+			            id: '_cube',
 						type: 'cube',
 						xSize: 0.1,
 						ySize : 0.1,
@@ -214,48 +185,28 @@ function ClientField(aspect){
 					}]
 				},
 				{
-					type: "node",
-					id: "mount-node"
+					type: 'node',
+					id: 'mount-node'
 				}]
 			}]
 		}]
 	});
 }
 mycs.inherit(ClientField, cs.Field);
-
-function LifeBars(){
-}
-LifeBars.prototype.add = function(playerId){
-	var frame = document.createElement('div');
-	frame.className = 'life_bar';
-	frame.id = 'life_bar_' + playerId;
-	
-	var life = document.createElement('div');
-	life.className = 'life_bar_life';
-	life.id = 'life_bar_life_' + playerId;
-	frame.appendChild(life);
-
-	if (playerId === myPlayerId) {
-		document.getElementById('my_life_bar_wrapper').appendChild(frame);
-	} else {
-		document.getElementById('life_bars').appendChild(frame);
-	}
-};
-LifeBars.prototype.remove = function(playerId){
-	var ele = document.getElementById('life_bar_' + playerId);
-	ele.parentNode.removeChild(ele);
-};
-LifeBars.prototype.update = function(playerId, percent){
-	document.getElementById('life_bar_life_' + playerId).style.width = percent + '%';
+ClientField.prototype.destroyPiecesByType = function(type){
+	var pieces = this.getPiecesByType(type);
+	pieces.forEach(function(piece) {
+		piece.destroy();
+	});
 };
 
-function Unit(point, type, oid){
-	if (typeof oid != 'undefined') {
-		this.id = oid;
+function Unit(pos, type, opt_id){
+	if (opt_id !== undefined) {
+		this.id = opt_id;
 	} else {
 		this.id = type + mycs.createId(cs.ID_SIZE);
 	}
-	this.pos = point;
+	this.pos = mycs.deepCopy(pos);
 	this.type = type;
 	this.idDirty = false;
 	field.addPiece(this, this.id);
@@ -291,6 +242,7 @@ Unit.prototype.updateScale = function(x, y, z) {
 	scale.set('x', x);	
 	scale.set('y', y);	
 	scale.set('z', z);
+	this.idDirty = true;
 };
 Unit.prototype.updatePosition = function(pos) {
 	this.pos = pos;
@@ -303,125 +255,19 @@ Unit.prototype.render = function(pos){
 	}
 };
 
-function Bullet(point, id, owner_type, r){
-	mycs.superClass(Bullet).constructor.apply(this, [point, 'bullet', id]);
-	this.ownerType = owner_type;
-	this.r = r;
-	this._createNode();
-}
-mycs.inherit(Bullet, Unit);
-Bullet.type = {
-	enemy: {
-		color: { r: 0.0, g: 0.0, b: 1.0 }
-	},
-	player: {
-		color: { r: 1.0, g: 1.0, b: 1.0 }
-	}
-};
-Bullet.prototype._createNode = function(){
-	mycs.superClass(Bullet)._createNode.apply(this, [{
-		type: "material",
-		baseColor: Bullet.type[this.ownerType].color,
-		shine: 4.0,
-		opacity: 1.0,
-        nodes: [{
-        	type: "sphere"
-        }]
-	}]);
-	this.updateScale(this.r, this.r, this.r);
-};
-
-function Explosion(point, firstR){
-	this.firstR = firstR;
-	this.lastR = firstR * 2;
-	this.duration = 500;
-	this.startTime = Date.now();
-	mycs.superClass(Explosion).constructor.apply(this, [point, 'explode', mycs.createId(cs.ID_SIZE)]);
-	this._createNode();
-	
-	var self = this;
-	setTimeout(function(){
-		self.destroy();
-	}, this.duration);
-}
-mycs.inherit(Explosion, Unit);
-Explosion.prototype._createNode = function(){
-	mycs.superClass(Explosion)._createNode.apply(this, [{
-		type: 'material',
-		baseColor: { r: 1.0, g: 0.0, b: 0.0 },
-		shine: 4.0,
-		opacity: 1.0,
-        nodes: [{
-        	type: 'sphere'
-        }]
-	}]);
-	this.updateScale(this.firstR, this.firstR, this.firstR);
-};
-Explosion.prototype.render = function(pos){
-	var r = this.firstR + (this.lastR - this.firstR) * Math.min((Date.now() - this.startTime) * (1 / this.duration), 1);
-	this.updateScale(r, r, r);
-};
-
-function Enemy(point, id){
-	mycs.superClass(Enemy).constructor.apply(this, [point, 'enemy', id]);
-	var self = this;
-	this._createNode();
-}
-mycs.inherit(Enemy, Unit);
-Enemy.X_ANGLE_BASE = 270.0;
-Enemy.prototype.destroy = function(){
-	if (this.throwTimer !== -1) {
-		clearInterval(this.throwTimer);
-	}
-	mycs.superClass(Enemy).destroy.apply(this, []);
-};
-Enemy.prototype._createNode = function(){
-	var blenderData;
-	if (this.id == myEnemyId) {
-		blenderData = BlenderExport.myEnemy;
-	} else {
-		blenderData = BlenderExport.enemy;
-	}
-	mycs.superClass(Enemy)._createNode.apply(this, [{
-		type: "material",
-		baseColor: { r: 1.0, g: 1.0, b: 1.0 },
-		nodes: [{
-			type: "texture",
-			layers: [{
-				uri: blenderData.textureUri,
-				blendMode: "multiply"
-			}],
-			nodes: [{
-				type: "geometry",
-				primitive: "triangles",			
-				positions: blenderData.vertices,
-				uv: blenderData.texCoords,
-				indices: blenderData.indices
-			}]
-		}]
-	}]);
-	SceneJS.withNode(this.id + '-rotate-x').set('angle', Enemy.X_ANGLE_BASE); 
-	this.updateScale(cs.ENEMY_SIZE, cs.ENEMY_SIZE, cs.ENEMY_SIZE);
-};
-Enemy.prototype.setDamege = function(damege){
-	this.destroy();
-	var enemies = field.getPiecesByType('enemy');
-};
 
 function ClientJoint(type, player){
 	mycs.superClass(ClientJoint).constructor.apply(this, [type, player]);
 			
 	function createEdge(id) {
 		return {
-			type: "translate",
+			type: 'translate',
 			id: id + '-translate',
 			nodes: chainSimpleRotateY(id, [{
-				type: "material",
-				baseColor: { r: 1.0, g: 0.0, b: 0.0 },
-				shine: 1.0,
-				opacity: 1.0,
+				type: 'material',
+				baseColor: { r: 0.0, g: 1.0, b: 0.0 },
 				nodes: [{
-					type : "cube",
+					type : 'cube',
 					xSize: cs.Joint.H_SIZE,
 					ySize: cs.Joint.H_SIZE,
 					zSize: cs.Joint.H_SIZE
@@ -429,45 +275,12 @@ function ClientJoint(type, player){
 			}])
 		};
 	}
-	function createShield(id) {
-		return {
-			type: "translate",
-			id: id + '-translate',
-			nodes: chainSimpleRotateY(id, [{
-			    type: "material",
-			    baseColor: { r: 0.2, g: 0.2, b: 0.2 },
-			    shine: 6.0,
-				opacity: 0.9,
-			    nodes: [{
-		            type: "texture",
-		            layers: [{
-	                    uri: "img/shield.png",
-	                    minFilter: "linearMipMapLinear",
-	                    wrapS: "repeat",
-	                    wrapT: "repeat",
-	                    scale : { x: 1.0, y: 1.0, z: 1.0 }
-		            }],
-					nodes: [{
-	                    type: "scale",
-	                    x: cs.Joint.SIELD_H_SIZE,
-	                    y: cs.Joint.SIELD_H_SIZE,
-	                    z: 0.1,
-	                    nodes: [{
-	                    	type: "cube"
-	                    }]
-		            }]
-			    }]
-			}])
-		};
-	}
 
-	if (this.type === 'LEFT_HAND') {
-		this._createNode(createShield);
-	} else {
-		this._createNode(createEdge);
-	}
-	
+	this._createNode(createEdge);
 }
+window.addEventListener('click', function(e) {
+    SceneJS.withNode('the-scene').pick(e.clientX, e.clientY);	
+});
 mycs.inherit(ClientJoint, cs.Joint);
 ClientJoint.prototype.destroy = function(){
 	removeNode(this.id);
@@ -496,15 +309,14 @@ ClientEdgePoints.prototype._createNode = function(){
 	var nodes = [];
 	for (var i = 0; i < cs.EdgePoints.NUM; i++) {
 		nodes.push({
-			type: "translate",
+			type: 'translate',
 			id: this.id + '-' + i + '-translate',
 			nodes: [{
-				type: "material",
-				baseColor:	  { r: 1.0, g: 0.0, b: 0.0 },
+				type: 'material',
+				baseColor:	  { r: 0.0, g: 1.0, b: 0.0 },
 				shine:          4.0,
-				opacity:        1.0,
 				nodes: [{
-					type : "cube",
+					type : 'cube',
 					xSize: cs.EdgePoints.H_SIZE,
 					ySize : cs.EdgePoints.H_SIZE,
 					zSize : cs.EdgePoints.H_SIZE
@@ -522,23 +334,83 @@ ClientEdgePoints.prototype.render = function(){
 	}
 };
 
+function Block(id, pos, r, color){
+	mycs.superClass(Block).constructor.apply(this, [pos, 'block', id]);
+	this.r = r;
+	this.color = mycs.deepCopy(color);
+	this._createNode();
+}
+mycs.inherit(Block, Unit);
+Block.prototype._createNode = function(){
+	mycs.superClass(Block)._createNode.apply(this, [{
+		type: 'material',
+		baseColor: this.color,
+		shine: 4.0,
+		nodes: [{
+			type : 'cube'
+		}]
+	}]);
+	this.updateScale(this.r, this.r, this.r);
+	var self = this;
+	SceneJS.withNode(this.id).bind('picked', function(e) {
+		remoteProxy.send({
+			type: 'destroy_block_request',
+			arg: {
+				id: self.id
+			}
+		});
+	});
+};
+var EYE_Y = 15;
+var EYE_LOOK_Y = 10;
+function ViewerEye(){
+	this.pos = {x:0, z:0};
+	this.angleY = 0;
+}
+ViewerEye.prototype.move = function(dir){
+	var angle = this.angleY;
+	if (dir === 'up') {
+		angle -= 180;
+	}
+	var diff = cs.calcRoatatePosition({
+		x: 0,
+		y: angle,
+		z: 0
+	}, 2);
+	this.pos.x += diff[0];
+	this.pos.y += diff[1];
+	this.pos.z += diff[2];
+
+	this.updateEye();
+};
+ViewerEye.prototype.turn = function(diff){
+	this.angleY += diff;
+	this.updateEye();
+};
+ViewerEye.prototype.updateEye = function(){
+	var eye = SceneJS.withNode('eye');
+	var newPos = cs.calcRoatatePosition({x:0, y:this.angleY, z:0}, 30);
+	eye.set('eye', {x: this.pos.x + newPos[0], y: EYE_Y, z: this.pos.z + newPos[2]});
+	eye.set('look', {x: this.pos.x, y: EYE_LOOK_Y, z: this.pos.z});
+};
+
 function ClientPlayer(id, opt_basePos, opt_angleY){
 	this.type = 'player';
 	this.id = id;
 	this.noPos = true;
 	this.HMDAngle = null;
+	this.lastBlockPos = null;
+	this.paintingMode = false;
 	var factory = {
 		createJoint: function(type, player){
 			return new ClientJoint(type, player);
 		},
 		createEdgePoints: function(type){
 			return new ClientEdgePoints(type);
-			
 		}
 	};
 	mycs.superClass(ClientPlayer).constructor.apply(this, [factory, opt_basePos, opt_angleY]);
 	field.addPiece(this, this.id);
-	lifeBars.add(this.id);
 }
 mycs.inherit(ClientPlayer, cs.Player);
 ClientPlayer.prototype.destroy = function(){
@@ -557,13 +429,6 @@ ClientPlayer.prototype.destroy = function(){
 		edgePoint.destroy();
 	}
 	field.removePiece(this.id);
-	lifeBars.remove(this.id);
-};
-ClientPlayer.prototype.updateLife = function(life){
-	lifeBars.update(this.id, life * (100 / cs.Player.LIFE_MAX));
-	if (this.id === myPlayerId && life === 0) {
-		displayMessage('You lose.<br><br>Press F5 to retry.');
-	}
 };
 ClientPlayer.prototype.setJointPosition = function(positions){
 	mycs.superClass(ClientPlayer).setJointPosition.apply(this, [positions]);
@@ -575,7 +440,7 @@ ClientPlayer.prototype.setJointPosition = function(positions){
 ClientPlayer.prototype.updateEye = function(){
 	if (this.isMyPlayer() && this.joints['HEAD'].pos) {
 		var headPos = this.joints['HEAD'].pos;
-		var eye = SceneJS.withNode('player_eye');
+		var eye = SceneJS.withNode('eye');
 		if (useVR920) {
 			if (!this.HMDAngle) {
 				return;
@@ -591,8 +456,8 @@ ClientPlayer.prototype.updateEye = function(){
 			eye.set('look', {x: headPos.x + diff[0], y: headPos.y + diff[1], z: headPos.z + diff[2]});
 		} else {
 			var newPos = cs.calcRoatatePosition({x:0, y:this.angleY, z:0}, 30);
-			eye.set('eye', {x: headPos.x + newPos[0], y: 15, z: headPos.z + newPos[2]});
-			eye.set('look', {x: headPos.x, y: 10, z: headPos.z});
+			eye.set('eye', {x: headPos.x + newPos[0], y: EYE_Y, z: headPos.z + newPos[2]});
+			eye.set('look', {x: headPos.x, y: EYE_LOOK_Y, z: headPos.z});
 		}
 	}
 };
@@ -619,12 +484,37 @@ ClientPlayer.prototype.render = function(){
 		var points = this.edgePoints[i];
 		points.render();
 	}
+	if (this.paintingMode) {
+		this.createBlock();
+	}
+	
 	if (useVR920) {
 		this.updateEye();
 	}
 };
+ClientPlayer.prototype.createBlock = function() {
+	var rightHand = this.joints['RIGHT_HAND'];
+	if (!rightHand || !rightHand.pos) {
+		return;
+	}
+	if (!this.lastBlockPos || (this.lastBlockPos && cs.calcDistance(this.lastBlockPos, rightHand.pos) > 0.4)) {
+		remoteProxy.send({
+			type: 'create_block_request',
+			arg: {
+				pos: rightHand.pos
+			}
+		});
+		this.lastBlockPos = mycs.deepCopy(rightHand.pos);
+	}
+};
 ClientPlayer.prototype.setHMDAngle = function(angle){
 	this.HMDAngle = angle;
+};
+ClientPlayer.prototype.startPaint = function(){
+	this.paintingMode = true;
+};
+ClientPlayer.prototype.endPaint = function(){
+	this.paintingMode = false;
 };
 
 function Counter(){
@@ -636,12 +526,14 @@ Counter.FPS = 0;
 Counter.REMOTE_PACKET = 1;
 Counter.DEVIDE_PACKET = 2;
 Counter.prototype.render = function(){
-	this.fpsCounter.update();
-	this.remotePacketCounter.update();
-	this.devicePacketCounter.update();
-	document.getElementById('packet_per_second_from_remote').innerHTML = this.remotePacketCounter.prevCount + ' Packet Frames / Second from remote';
-	document.getElementById('packet_per_second_from_device').innerHTML = this.devicePacketCounter.prevCount + ' Packet Frames / Second from device';
-	document.getElementById('fps').innerHTML = this.fpsCounter.prevCount + ' / ' + FPS + ' fps (Exclude Event\'s update)';
+	if (this.fpsCounter.update() ||
+		this.remotePacketCounter.update() ||
+		this.devicePacketCounter.update()) {
+		$('#packet_per_second_from_remote').text(this.remotePacketCounter.prevCount + ' packet frames / second from remote');
+		$('packet_per_second_from_device').text(this.devicePacketCounter.prevCount + ' packet frames / second from device');
+		$('#fps').text(this.fpsCounter.prevCount + ' / ' + FPS + ' fps (Exclude Event\'s update)');
+		$('#block_number').text(field.getPiecesByType('block').length + ' blocks');
+	}
 };
 Counter.prototype.increment = function(type){
 	switch (type) {
@@ -672,7 +564,6 @@ RenderingTimer.prototype.start = function(){
 		if (this.timer === -1) {
 			this.timer = setInterval(function(){ render(); }, 1000 / FPS);
 		}
-		
 	}
 };
 RenderingTimer.prototype.stop = function(){
@@ -684,130 +575,104 @@ RenderingTimer.prototype.stop = function(){
 
 function switchHMDMode(){
 	useVR920 = !useVR920;
-	var ele = document.getElementById('swith_VR920_mode');
+	var ele = $('#swith_VR920_mode');
 	if (useVR920) {
-		ele.innerHTML = 'VR920 off';
+		ele.text('VR920 off');
 	} else {
 		var player = field.getPiece(myPlayerId);
 		if (player) {
 			player.updateEye();
 		}
-		ele.innerHTML = 'VR920 on';
+		ele.text('VR920 on');
 	}
 }
 
-var handleRemoteMessage = function(data){
-	counter.increment(Counter.REMOTE_PACKET);
-	if (data.type !== 'kinect_joint_postion' && data.arg && data.arg.type === 'player') {
-		LOG(data.type);
-	}
-	var bullet, enemy, player, piece;
-	switch (data.type) {
-	case 'switch_hmd_mode':
-		switchHMDMode();
+function createUnit(data) {
+	switch(data.arg.type){
+	case 'player':
+		new ClientPlayer(data.arg.id, data.arg.basePos, data.arg.angleY);
 		break;
-	case 'controller_list':
-		LOG('handleMainBrowserMessage: list: ' + data.arg.list);
-		nobind_conrollers.update(data.arg.list);
-		break;
-	case 'set_player_id':
-		myPlayerId = data.arg.id;
-		break;
-	case 'kinect_joint_postion':
-		player = field.getPiece(data.arg.id);
-		if (!player) {
-			return;
-		}
-		player.setJointPosition(data.arg.positions);
-		break;
-	case 'set_base_position':
-		player = field.getPiece(data.arg.id);
-		if (!player) {
-			return;
-		}
-		player.setBasePosition(data.arg.pos);
-		break;
-	case 'update_position':
-		switch(data.arg.type){
-		case 'bullet':
-			bullet = field.getPiece(data.arg.id);
-			if (bullet) {
-				bullet.updatePosition(data.arg.pos);
-			}
-			break;
-		}
-		break;
-	case 'turn':
-		player = field.getPiece(data.arg.id);
-		if (!player) {
-			return;
-		}
-		player.turn(data.arg.diff);
-		break;
-	case 'joint_pos':	// for remote user
-		player = field.getPiece(data.arg.id);
-		if (!player) {
-			return;
-		}
-		player.joints[data.arg.type].setPosition(data.arg.pos);
-		break;
-	case 'edge_point_pos':
-		player = field.getPiece(data.arg.id);
-		if (!player) {
-			return;
-		}
-		player.edge_points[data.arg.type].setPosition(data.arg.index, data.arg.pos);
-		break;
-	case 'send_map':	// through
-	case 'create':
-		switch(data.arg.type){
-		case 'enemy':
-			new Enemy(data.arg.pos, data.arg.id);
-			break;
-		case 'bullet':
-			new Bullet(data.arg.pos, data.arg.id, data.arg.ownerType);
-			break;
-		case 'player':
-			new ClientPlayer(data.arg.id, data.arg.basePos, data.arg.angleY);
-			break;
-		default:
-			ASSERT(false);
-			break;
-		}
-		break;
-	case 'destroy':
-		piece = field.getPiece(data.arg.id);
-		if (piece) {
-			piece.destroy();
-		}
-		break;
-	case 'update_life':
-		player = field.getPiece(data.arg.id);
-		if (!player) {
-			return;
-		}
-		player.updateLife(data.arg.life);
-		break;
-	case 'bind_enemy':
-		myEnemyId = data.arg.id;
-		break;
-	case 'explode':
-		new Explosion(data.arg.pos, data.arg.firstR);
-		break;
-	case 'echo_request':
-		remoteProxy.send({
-			type: 'echo_response',
-			arg: {
-				timestamp: data.arg.timestamp
-			}
-		});
-		break;
-	case 'echo_response':
-		document.getElementById('echo_info').textContent = 'Echo time: ' + (Date.now() - data.arg.timestamp) + ' ms';
+	case 'block':
+		new Block(data.arg.id, data.arg.pos, data.arg.r, data.arg.color);
 		break;
 	default:
 		ASSERT(false);
 		break;
+	}
+}
+var remoteMessageHandlers = {
+	start_paint: handleDeviceMessage,
+	end_paint: handleDeviceMessage,
+	switch_hmd_mode: function(data) {
+		switchHMDMode();
+	},
+	controller_list: function(data) {
+		nobindConrollers.update(data.arg.list);
+	},
+	set_player_id: function(data) {
+		$('#player_info').css('display', 'block');
+		myPlayerId = data.arg.id;
+	},
+	kinect_joint_postion: function(data) {
+		var player = field.getPiece(data.arg.id);
+		if (!player) {
+			return;
+		}
+		player.setJointPosition(data.arg.positions);
+	},
+	set_base_position: function(data) {
+		var player = field.getPiece(data.arg.id);
+		if (!player) {
+			return;
+		}
+		player.setBasePosition(data.arg.pos);
+	},
+	turn: function(data) {
+		var player = field.getPiece(data.arg.id);
+		if (!player) {
+			return;
+		}
+		player.turn(data.arg.diff);
+	},
+	move: function(data) {
+		var player = field.getPiece(data.arg.id);
+		if (!player) {
+			return;
+		}
+		player.move(data.arg.dir);
+	},
+	send_map: createUnit,
+	create: createUnit,
+	destroy: function(data) {
+		var piece = field.getPiece(data.arg.id);
+		if (piece) {
+			piece.destroy();
+		}
+	},
+	echo_response: function(data) {
+		$('#echo_info').text('Echo TAT: ' + (Date.now() - data.arg.timestamp) + ' ms');
+	},
+	clear_all_blocks: function(data) {
+		field.destroyPiecesByType('block');
+	},
+	/*
+	joint_pos: function(data) {
+		var player = field.getPiece(data.arg.id);
+		if (!player) {
+			return;
+		}
+		player.joints[data.arg.type].setPosition(data.arg.pos);
+	},
+	edge_point_pos: function(data) {
+		var player = field.getPiece(data.arg.id);
+		if (!player) {
+			return;
+		}
+		player.edge_points[data.arg.type].setPosition(data.arg.index, data.arg.pos);
+	},
+	*/
+	browser_count: function(data) {
+		$('#browser_count').text(data.arg.count + ' browsers connected.');
 	}
 };
 
@@ -830,11 +695,8 @@ function adjustKinectPositions(positions){
 	}
 }
 
-function handleDeviceMessage(data){
-	var player;
-	counter.increment(Counter.DEVIDE_PACKET);
-	switch (data.type) {
-	case 'kinect_joint_postion':
+var deviceMessageHandlers = {
+	kinect_joint_postion: function(data) {
 		if (myPlayerId === -1) {
 			remoteProxy.send({	// todo: fix duplication of invoking
 				type: 'create_player_request',
@@ -845,24 +707,43 @@ function handleDeviceMessage(data){
 			updateKinectBasePosition(data.arg.positions);
 		} else {
 			adjustKinectPositions(data.arg.positions);
-			remoteProxy.send(data);
-			player = field.getPiece(myPlayerId);
+			var player = field.getPiece(myPlayerId);
 			if (player) {
-				player.setJointPosition(data.arg.positions);	// server don't send client kinect data to it self for reducing latency.
+				player.setJointPosition(data.arg.positions);
 			}
 		}
-		break;
-	case 'vr920':
-		player = field.getPiece(myPlayerId);
+	},
+	vr920: function(data) {
+		var player = field.getPiece(myPlayerId);
 		if (player) {
 			player.setHMDAngle({yaw: data.arg.yaw, pitch: data.arg.pitch, roll: data.arg.roll});
 		}
-		break;
+	},
+	start_paint: function(data) {
+		var player = field.getPiece(myPlayerId);
+		if (player) {
+			player.startPaint();
+		}
+	},
+	end_paint: function(data) {
+		var player = field.getPiece(myPlayerId);
+		if (player) {
+			player.endPaint();
+		}
+	}
+};
+
+function handleDeviceMessage(data) {
+	counter.increment(Counter.DEVIDE_PACKET);
+	var handler = deviceMessageHandlers[data.type];
+	if (handler) {
+		handler(data);
+	} else {
+		ASSERT('Unexpected command from device server: ' + data);
 	}
 }
 
 function render() {
-	
 	var pieces = field.getAllPieces();
 	for (var i = 0, len = pieces.length; i < len; i++) {
 		pieces[i].render();
@@ -870,131 +751,207 @@ function render() {
 	counter.increment(Counter.FPS);
 	counter.render();
 	if (DEBUG) {
-		/*
-		var object_count = 0;
-		for (var k in field._idMap) {
-			object_count++;
-		}
-		document.getElementById('output').innerHTML = object_count;
-		*/
+//		$('#pieces_count').text(field.getAllPieces().length);
 	}
-	SceneJS.withNode("the-scene").render();
+	SceneJS.withNode('the-scene').render();
 }
 
-function handleLoad(e){
-	counter = new Counter();
-	var canvas = document.getElementById('main_canvas');
-	canvas.width = document.body.clientWidth;
-	canvas.height = document.body.clientHeight;
+function DummyRemoteProxy(port, openProc, messageProc, closeProc, opt_fullDomain){
+	mycs.superClass(DummyRemoteProxy).constructor.apply(this, [port, openProc, messageProc, closeProc, opt_fullDomain]);
+	setTimeout(function() {
+		openProc();
+	}, 0);
+	this.createRequested = false;
+}
+mycs.inherit(DummyRemoteProxy, myc.Proxy);
+DummyRemoteProxy.prototype.send = function(message) {
+	var self = this;
+	var newMesssage = mycs.deepCopy(message);
+	switch(message.type) {	// todo: fix move and turn
+	case 'move_request':
+		newMesssage.type = 'move';
+		newMesssage.arg.id = myPlayerId;
+		setTimeout(function() {
+			self.messageProc(newMesssage);
+		}, 0);
+		break;
+	case 'turn_request':
+		newMesssage.type = 'turn';
+		newMesssage.arg.id = myPlayerId;
+		setTimeout(function() {
+			self.messageProc(newMesssage);
+		}, 0);
+		break;
+	case 'create_player_request':
+		if (this.createRequested) {
+			return;
+		}
+		this.createRequested = true;
+		var id = mycs.createId(cs.ID_SIZE);
+		setTimeout(function() {
+			self.messageProc({
+				type: 'set_player_id',
+				arg: {
+					id: id
+				}
+			});
+			setTimeout(function() {
+				self.messageProc({
+					type: 'create',
+					arg: {
+						type: 'player',
+						id: id
+					}
+				});
+			}, 0);
+		}, 0);
+		break;
+	}
+};
 
-	var canvas_bound_rect = canvas.getBoundingClientRect();
+function DummyDeviceProxy(port, openProc, messageProc, closeProc, opt_fullDomain){
+	mycs.superClass(DummyDeviceProxy).constructor.apply(this, [port, openProc, messageProc, closeProc, opt_fullDomain]);
+	var len = dummyDeviceData.length;
+	var count = 0;
+	setTimeout(function() {
+		openProc();
+		var timer = setInterval(function() {
+			var data = dummyDeviceData[count];
+			messageProc(mycs.deepCopy(data));
+			count++;
+			if (count >= len) {
+				clearInterval(timer);
+			}
+		}, 20);
+	}, 0);
+}
+mycs.inherit(DummyDeviceProxy, myc.Proxy);
 
-	var myLifeBarOuter = document.getElementById('my_life_bar_wrapper');
-	myLifeBarOuter.style.width = (canvas_bound_rect.width - 20) + 'px';
+function startDeviceProcy() {
+	var deviceProxyClass;
+	if (window.dummyDeviceData !== undefined) {
+		deviceProxyClass = DummyDeviceProxy;
+	} else {
+		deviceProxyClass = myc.SocketIoProxy;
+	}
+	deviceProxy = new deviceProxyClass(
+		devicePort,
+		function(){
+			LOG('device proxy open');
+		},
+		function(data) {
+			handleDeviceMessage(data);
+		},
+		function(){
+			LOG('device proxy close');
+		},
+		'127.0.0.1'
+	);
+}
 
-	var info = document.getElementById('info');
-	info.style.left = canvas_bound_rect.left + window.scrollX + 10 + 'px';
-	info.style.top = canvas_bound_rect.top + window.scrollY + 10 + 'px';
-	
-	field = new ClientField(canvas.width / canvas.height);
-	remoteProxy = new myc.SocketIoProxy(
+function startRemoteProcy() {
+	var remoteProxyClass;
+	if (useDummyRemote) {
+		remoteProxyClass = DummyRemoteProxy;
+	} else {
+		remoteProxyClass = myc.SocketIoProxy;
+	}
+	var echoTimer = -1;
+	remoteProxy = new remoteProxyClass(
 		cs.REMOTE_PORT,
 		function(){
 			LOG('remote proxy open');
-			deviceProxy = new myc.SocketIoProxy(
-				devicePort,
-				function(){
-					LOG('device proxy open');
-				},
-				handleDeviceMessage,
-				function(){
-					LOG('device proxy close');
-				},
-				'127.0.0.1'
-			);
-			nobind_conrollers = new NobindControllers();
-			
-			setInterval(function() {
+			startDeviceProcy();
+			nobindConrollers = new NobindControllers();
+			echoTimer = setInterval(function() {
 				remoteProxy.send({
 					type: 'echo_request',
 					arg: {
 						timestamp: Date.now()
 					}
 				});
-			}, 1000);
+			}, 10000);
 		},
-		handleRemoteMessage,
+		function(data) {
+			counter.increment(Counter.REMOTE_PACKET);
+			if (data.type !== 'kinect_joint_postion' && data.arg && data.arg.type === 'player') {
+				LOG(data.type);
+			}
+			var handler = remoteMessageHandlers[data.type];
+			if (handler) {
+				handler(data);
+			} else {
+				ASSERT('Unexpected command from remote server: ' + data);
+			}
+		},
 		function(){
+			clearInterval(echoTimer);
 			LOG('remote proxy close');
 		}
 	);
-	document.getElementById('swith_VR920_mode').addEventListener('click', switchHMDMode, false);
+}
+
+window.addEventListener('load', function() {
+	counter = new Counter();
+	var canvas = $('#main_canvas')
+		.prop('width', document.body.clientWidth)
+		.prop('height', document.body.clientHeight);
+
+	var canvasOffset = canvas.offset();
+	var info = $('#info')
+		.css('left', canvasOffset.left + window.scrollX + 10)
+		.css('top', canvasOffset.top + window.scrollY + 10);
+	
+	field = new ClientField(canvas.prop('width') / canvas.prop('height'));
+	viewerEye = new ViewerEye();
+	viewerEye.updateEye();
+	startRemoteProcy();
+	$('#swith_VR920_mode').bind('click', switchHMDMode);
 
 	renderingTimer = new RenderingTimer();
 	renderingTimer.start();
-	
-	lifeBars = new LifeBars();
-}
-window.addEventListener('load', handleLoad, false);
+}, false);
 
-function handleKeydown(e){
+window.addEventListener('keydown', function(e) {
 	var eye_pos;
 	switch(e.keyCode){
 	case KeyEvent.DOM_VK_P:
 		eye_pos = mycs.deepCopy(LOOK_AT_EYE);
 		eye_pos.z = -eye_pos.z;
-		SceneJS.withNode('player_eye').set('eye', eye_pos);
-		e.preventDefault();
-		break;
-	case KeyEvent.DOM_VK_V:
-		remoteProxy.send({
-			type: 'bullet',
-			arg: {
-				id: myEnemyId
-			}
-		});
-		SceneJS.withNode('player_eye').set('eye', LOOK_AT_EYE);
+		SceneJS.withNode('eye').set('eye', eye_pos);
 		e.preventDefault();
 		break;
 	case KeyEvent.DOM_VK_UP:
 	case KeyEvent.DOM_VK_DOWN:
-		remoteProxy.send({
-			type: 'move_request',
-			arg: {
-				dir: myc.keyCodeToDir[e.keyCode]
-			}
-		});
-		e.preventDefault();
-		break;
-	case KeyEvent.DOM_VK_RIGHT:
-	case KeyEvent.DOM_VK_LEFT:
-		remoteProxy.send({
-			type: 'turn',
-			arg: {
-				diff: {'right': -10, 'left': 10}[myc.keyCodeToDir[e.keyCode]]
-			}
-		});
-		e.preventDefault();
-		break;
-	case KeyEvent.DOM_VK_SPACE:
-		if (field.getPiece(myEnemyId)) {
+		var dir = myc.keyCodeToDir[e.keyCode];
+		if (myPlayerId === -1) {
+			viewerEye.move(dir);
+		} else {
 			remoteProxy.send({
-				type: 'bullet',
+				type: 'move_request',
 				arg: {
-					id: myEnemyId
+					dir: dir
 				}
 			});
 		}
 		e.preventDefault();
+		break;
+	case KeyEvent.DOM_VK_RIGHT:
+	case KeyEvent.DOM_VK_LEFT:
+		var diff = {'right': -10, 'left': 10}[myc.keyCodeToDir[e.keyCode]];
+		if (myPlayerId === -1) {
+			viewerEye.turn(diff);
+		} else {
+			remoteProxy.send({
+				type: 'turn_request',
+				arg: {
+					diff: diff
+				}
+			});
+		}
+		e.preventDefault();
+		break;
 	}
-}
-window.addEventListener('keydown', handleKeydown, false);
-
-window.addEventListener('focus', function(){
-//	renderingTimer.start();
-}, false);
-window.addEventListener('blur', function(){
-//	renderingTimer.stop();
 }, false);
 
 })();
