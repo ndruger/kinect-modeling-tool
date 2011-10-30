@@ -1,0 +1,86 @@
+<html>
+<head>
+	<meta http-equiv=content-type content="text/html; charset=UTF-8">
+	<meta http-equiv="cache-control" content="no-cache">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+	<title>css model viewer</title>
+	<style TYPE="text/css">
+		#mount {
+			-webkit-transform-style: preserve-3d;
+			-webkit-transform: translateX(0px) translateY(0px) translateZ(0px);
+			-webkit-perspective: 1800;
+			position: absolute;
+			top: 0px;
+			left: 0px;
+		}
+		.animation {
+			-webkit-animation-name: animation;
+			-webkit-animation-duration: 7000ms;
+			-webkit-animation-timing-function: linear;
+			-webkit-animation-iteration-count: infinite;
+		}
+		@-webkit-keyframes animation {
+			0% {
+				-webkit-transform: rotateY(0deg);
+			}
+			100% {
+				-webkit-transform: rotateY(360deg);
+			}
+		}
+		.surface {
+			border: 1px solid; 
+		}
+		
+		body {
+			min-width: 320px;
+			min-height: 480px;
+/*			-webkit-transform: translateZ(0px);*/
+			background-color: #000000;
+		}
+		.point {
+			-webkit-transform-style: preserve-3d;
+		}
+		.polygon_medium {
+			position: absolute;
+			-webkit-transform-style: preserve-3d;
+		}
+		.polygon_base {
+			position: absolute;
+			-webkit-transform-style: preserve-3d;
+		}
+		#block_number {
+			color: #ff0000;
+		}
+	</style>
+</head>
+<body>
+	<div id="dummy_space"></div>
+	<button id="animation_switch">Stop Animation</button>
+	<div id="block_number"></div>
+	<div id="mount"></div>
+	<script type="text/javascript" src="lib/glMatrix-0.9.4.min.js"></script>
+	<script type="text/javascript" src="../client/lib/underscore-min.js"></script>
+	<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.1/jquery.min.js"></script>
+	<script type="text/javascript">
+		var myModules = {};
+	</script>
+	<script type="text/javascript" src="../lib/my/my_client_and_server.js"></script>
+	<script type="text/javascript" src="../lib/my/my_client.js"></script>
+	<script type="text/javascript">
+		myModules.mycs.setShorthands(window);
+	</script>
+	<script type="text/javascript">
+		(function() {
+			var data = 'Default';
+			var queryData = myModules.myc.parseQuery().data;
+			if (queryData && myModules.mycs.isSafeFilename(queryData)) {
+				data = queryData;
+			}
+			document.write('<script type="text/javascript" src="../remote_server/save/' + data + '.json"></' + 'script>');
+		})();
+	</script>
+	<script type="text/javascript" src="css3d.js"></script>
+	<script type="text/javascript" src="model_viewer_css.js"></script>
+	<script type="text/javascript" src="controller.js"></script>
+</body>
+</html>
